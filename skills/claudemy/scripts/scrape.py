@@ -41,12 +41,23 @@ def is_web(url):
     return urllib.parse.urlsplit(url).scheme in ("http", "https")
 
 
+class WebOnlyRedirects(urllib.request.HTTPRedirectHandler):
+    # The stock handler follows redirects to ftp:// too.
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not is_web(newurl):
+            raise urllib.error.URLError(f"redirect to a non-http(s) url: {newurl}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+OPENER = urllib.request.build_opener(WebOnlyRedirects)
+
+
 def fetch(url):
     # urlopen also opens file:// and ftp://, and sitemap and feed links are chosen by
     # the remote site, so a hostile feed could copy a local file into raw/.
     if not is_web(url):
         raise urllib.error.URLError(f"not an http(s) url: {url}")
-    with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
+    with OPENER.open(urllib.request.Request(url, headers=UA), timeout=30) as r:
         return r.read().decode("utf-8", "replace")
 
 
@@ -238,7 +249,8 @@ def scrape_rss(ws, person, site):
     have, kept = urls_on_disk(out), 0
     min_words = site.get("min_words", 150)
     for it in feed_items(fetch(site["feed"])):
-        if kept >= site.get("limit", 100) or not it["url"] or it["url"] in have:
+        # A feed with full content is written without a fetch, so check the url here too.
+        if kept >= site.get("limit", 100) or not is_web(it["url"]) or it["url"] in have:
             continue
         body = to_text(it["html"])
         if len(body.split()) >= min_words:
