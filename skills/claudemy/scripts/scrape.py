@@ -24,7 +24,7 @@ Author kinds, picked by the keys on each entry:
 Usage: python3 scrape.py <workspace> [name-substring | web]
 Re-runs skip posts already on disk, so an interrupted run resumes.
 """
-import html, json, re, sys, time, urllib.error, urllib.request
+import html, json, re, sys, time, urllib.error, urllib.parse, urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -37,7 +37,15 @@ UA = {"User-Agent": "Mozilla/5.0 (claudemy skill)"}
 NETWORK_ERRORS = (urllib.error.URLError, ConnectionError, TimeoutError)
 
 
+def is_web(url):
+    return urllib.parse.urlsplit(url).scheme in ("http", "https")
+
+
 def fetch(url):
+    # urlopen also opens file:// and ftp://, and sitemap and feed links are chosen by
+    # the remote site, so a hostile feed could copy a local file into raw/.
+    if not is_web(url):
+        raise urllib.error.URLError(f"not an http(s) url: {url}")
     with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
         return r.read().decode("utf-8", "replace")
 
@@ -149,6 +157,8 @@ def save_page(out, person, url, fallback_date, min_words, reasons=None):
         if reasons is not None:
             reasons[url] = why
         return False
+    if not is_web(url):
+        return skip("not an http(s) url")
     try:
         raw = fetch(url)
     except urllib.error.HTTPError as e:
