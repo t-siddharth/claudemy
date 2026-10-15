@@ -84,6 +84,10 @@ def urls_on_disk(out):
 
 
 def write_post(out, person, title, date, url, body, paywalled=False):
+    # The date comes from the remote page and becomes part of the file name;
+    # "/tmp/x" or "../../x" there would write outside raw/.
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date or ""):
+        date = "undated"
     slug = slugify(url.rstrip("/").rsplit("/", 1)[-1])[:80] or "post"
     if person["name"] == "web":
         # Web pages come from many sites, and "index" or "guide" repeats across them.
